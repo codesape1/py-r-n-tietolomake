@@ -1,43 +1,43 @@
 // api/brands.js
 import { createClient } from '@supabase/supabase-js';
 
-const TABLE = process.env.TABLE_NAME || 'e_bikes';
+/*
+ * ENV-muuttujat (Vercel tai .env):
+ *   SUPABASE_URL
+ *   SUPABASE_SERVICE_ROLE_KEY   // voit vaihtaa anon-key:hen, jos RLS sallii selectin
+ */
 
 export default async function handler(req, res) {
-  cors(res);
+  setCors(res);
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   try {
-    const sb = createClient(
+    const supa = createClient(
       process.env.SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY       // vaihda anon-key:hen jos RLS käytössä
+      process.env.SUPABASE_SERVICE_ROLE_KEY
     );
 
-    // distinct brand_slug + brand_name yhdellä kyselyllä
-    const { data, error } = await sb
-      .from(TABLE)
-      .select('brand_slug, brand_name', { distinct: 'brand_slug' })
-      .not('brand_slug', 'is', null);
-
+    /*  TÄRKEIN MUUTOS  —  haetaan yhdellä RPC-kutsulla  */
+    const { data, error } = await supa.rpc('distinct_brands');  // [{ slug, name }]
     if (error) throw error;
 
-    // 🎩  deduplikointi + aakkosjärjestys
-    const brands = (data || [])
-      .map(r => ({
-        slug: String(r.brand_slug),
-        name: r.brand_name || r.brand_slug        // varmistus
-      }))
-      .sort((a, b) => a.name.localeCompare(b.name));
+    /*  Aakkosjärjestys varmuuden vuoksi (RPC jo järjestää)  */
+    const brands = (data || []).sort((a, b) =>
+      a.name.localeCompare(b.name, 'fi')
+    );
 
     return res.status(200).json({ brands });
   } catch (e) {
-    console.error('brands error', e);
+    console.error('brands error:', e);
     return res.status(500).json({ error: String(e.message || e) });
   }
 }
 
-function cors(res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');          // rajoita jos haluat
+/* ----------------------------------------------------------------- */
+/* Helpers                                                           */
+/* ----------------------------------------------------------------- */
+function setCors(res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');        // rajaa omaan domainiin jos haluat
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 }

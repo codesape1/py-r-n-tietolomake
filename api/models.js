@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 
-const RPC = process.env.RPC_NAME || 'search_models_test';
+const RPC = process.env.RPC_NAME || 'search_models';
 
 export default async function handler(req, res) {
   cors(res);

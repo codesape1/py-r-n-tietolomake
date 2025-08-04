@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 
-const TABLE = process.env.TABLE_NAME || 'e_bikes_test';
+const TABLE = process.env.TABLE_NAME || 'e_bikes';
 
 export default async function handler(req, res) {
   cors(res);

@@ -1,4 +1,4 @@
-// api/models-list.js  (täysin uusi tiedosto)
+// api/models-list.js
 import { createClient } from '@supabase/supabase-js';
 
 export default async function handler(req, res) {
@@ -8,16 +8,14 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  // Parametrit
   const { brand, year } = req.query || {};
   if (!brand || !year) {
     return res.status(400).json({ error: 'brand and year are required' });
   }
 
-  // Supabase-kutsu
   const sb = createClient(
     process.env.SUPABASE_URL,
-    process.env.SUPABASE_SERVICE_ROLE_KEY   // tai anon-key + RLS
+    process.env.SUPABASE_SERVICE_ROLE_KEY   // service-role ohittaa RLS
   );
 
   const { data, error } = await sb.rpc('distinct_models', {
@@ -26,9 +24,8 @@ export default async function handler(req, res) {
   });
 
   if (error) {
-    console.error('models-list error', error);
+    console.error('models-list error:', error);
     return res.status(500).json({ error: error.message });
   }
-
-  return res.status(200).json({ models: data });   // [{ model_slug, name }]
+  res.status(200).json({ models: data });   // [{ model_slug, name }]
 }

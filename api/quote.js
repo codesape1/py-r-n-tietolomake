@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { setCors } from '../../lib/cors.js';
+import { setCors } from './cors.js';
 
 const QUOTES = process.env.QUOTES_TABLE || 'quotes';
 
@@ -12,12 +12,8 @@ export default async function handler(req, res) {
     const body = await readJson(req);
 
     /* --- honeypot --- */
-    if (body.company) {
-      // hiljainen droppi boteille
-      return res.status(200).json({ ok: true });
-    }
+    if (body.company) return res.status(200).json({ ok: true });
 
-    // --- otetaan kentät lomakkeesta ---
     const {
       brand, year, model, model_slug, size,
       mileage_km, price_new_eur,
@@ -26,7 +22,7 @@ export default async function handler(req, res) {
       privacy_consent, photo_urls
     } = body || {};
 
-    // --- minimivaatimukset ---
+    /* minimivaatimukset */
     if (!brand || !year || !email) {
       return res.status(400).json({ error: 'brand, year and email are required' });
     }
@@ -37,20 +33,21 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'privacy consent required' });
     }
 
-    // --- liiketoimintasäännöt ---
-    const yearNum = parseInt(year, 10);
-    const okYear = yearNum >= 2020 && yearNum <= 2025;
-    const okMileage = (mileage_km ?? 0) <= 7000;
-    const okPrice = (price_new_eur ?? 0) <= 7000;
-    const okReceipt = receipt_status && receipt_status !== 'no';
-    const okTuning = tuned_over_25 === false;
-    const okAssist = assist_ok === true;
+    /* liiketoimintasäännöt */
+    const yearNum = +year;
+    const ok =
+      yearNum >= 2020 && yearNum <= 2025 &&
+      (mileage_km ?? 0) <= 7000 &&
+      (price_new_eur ?? 0) <= 7000 &&
+      receipt_status && receipt_status !== 'no' &&
+      tuned_over_25 === false &&
+      assist_ok === true;
 
-    if (!(okYear && okMileage && okPrice && okReceipt && okTuning && okAssist)) {
+    if (!ok) {
       return res.status(400).json({ error: 'Bike does not meet purchase criteria' });
     }
 
-    // --- talletus Supabaseen ---
+    /* talletus */
     const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
     const row = {
       brand_slug: String(brand).toLowerCase(),
@@ -58,8 +55,8 @@ export default async function handler(req, res) {
       model_input: model || null,
       model_slug: model_slug || null,
       size: size || null,
-      mileage_km: mileage_km !== undefined && mileage_km !== '' ? Number(mileage_km) : null,
-      price_new_eur: price_new_eur !== undefined && price_new_eur !== '' ? Number(price_new_eur) : null,
+      mileage_km: mileage_km ? +mileage_km : null,
+      price_new_eur: price_new_eur ? +price_new_eur : null,
       receipt_status: receipt_status || null,
       tuned_over_25: tuned_over_25 ?? null,
       assist_ok: assist_ok ?? null,
@@ -72,10 +69,10 @@ export default async function handler(req, res) {
       source: 'shopify'
     };
 
-    const { data, error } = await sb.from(QUOTES).insert([row]).select().single();
+    const { data, error } = await sb.from(QUOTES).insert(row).select().single();
     if (error) throw error;
 
-    // (valinnainen) Make-tai Sheets-webhook
+    /* vapaaehtoinen Make / Sheets -webhook */
     if (process.env.MAKE_WEBHOOK_URL) {
       fetch(process.env.MAKE_WEBHOOK_URL, {
         method: 'POST',
@@ -86,7 +83,7 @@ export default async function handler(req, res) {
 
     return res.status(200).json({ ok: true, id: data.id });
   } catch (e) {
-    console.error('quote error', e);
+    console.error('quote error:', e);
     return res.status(500).json({ error: 'Internal server error' });
   }
 }

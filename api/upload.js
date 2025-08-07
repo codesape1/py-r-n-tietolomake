@@ -1,10 +1,10 @@
 import { createClient } from '@supabase/supabase-js';
-import { setCors } from '../../lib/cors.js';
+import { setCors } from './cors.js';
 
 const BUCKET = process.env.BUCKET_NAME || 'quote_uploads';
 
 export const config = {
-  api: { bodyParser: { sizeLimit: '10mb' } }   // ~3–5 kuvaa
+  api: { bodyParser: { sizeLimit: '10mb' } }
 };
 
 export default async function handler(req, res) {
@@ -13,20 +13,20 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   try {
-    const { files } = await readJson(req);   // [{name,type,data(base64)}]
+    const { files } = await readJson(req); // [{ name,type,data(base64) }]
     if (!Array.isArray(files) || files.length === 0) {
       return res.status(400).json({ error: 'files[] required' });
     }
 
     const supa = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
-    const out = [];
+    const urls = [];
 
     for (const f of files) {
       const { name, type, data } = f || {};
       if (!name || !type || !data) continue;
 
       const bytes = Buffer.from(data, 'base64');
-      const key = `${new Date().toISOString().slice(0,10)}/${cryptoRandom(8)}_${sanitize(name)}`;
+      const key = `${new Date().toISOString().slice(0,10)}/${randHex(8)}_${sanitize(name)}`;
 
       const { error } = await supa.storage.from(BUCKET).upload(key, bytes, {
         contentType: type,
@@ -35,12 +35,12 @@ export default async function handler(req, res) {
       if (error) throw error;
 
       const { data: pub } = supa.storage.from(BUCKET).getPublicUrl(key);
-      out.push(pub.publicUrl);
+      urls.push(pub.publicUrl);
     }
 
-    return res.status(200).json({ urls: out });
+    return res.status(200).json({ urls });
   } catch (e) {
-    console.error('upload error', e);
+    console.error('upload error:', e);
     return res.status(500).json({ error: 'Internal server error' });
   }
 }
@@ -53,9 +53,9 @@ async function readJson(req) {
   return text ? JSON.parse(text) : {};
 }
 
-function cryptoRandom(n) {
+function randHex(n) {
   return [...crypto.getRandomValues(new Uint8Array(n))]
-    .map(b => b.toString(16).padStart(2,'0')).join('');
+    .map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
 function sanitize(name) {

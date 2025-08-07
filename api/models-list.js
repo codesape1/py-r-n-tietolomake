@@ -1,11 +1,8 @@
-// api/models-list.js
 import { createClient } from '@supabase/supabase-js';
+import { setCors } from './cors.js';
 
 export default async function handler(req, res) {
-  // CORS
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  setCors(req, res);
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   const { brand, year } = req.query || {};
@@ -13,19 +10,21 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'brand and year are required' });
   }
 
-  const sb = createClient(
-    process.env.SUPABASE_URL,
-    process.env.SUPABASE_SERVICE_ROLE_KEY   // service-role ohittaa RLS
-  );
+  try {
+    const sb = createClient(
+      process.env.SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_ROLE_KEY
+    );
 
-  const { data, error } = await sb.rpc('distinct_models', {
-    p_brand: brand,
-    p_year : +year
-  });
+    const { data, error } = await sb.rpc('distinct_models', {
+      p_brand: brand,
+      p_year: +year
+    });
+    if (error) throw error;
 
-  if (error) {
-    console.error('models-list error:', error);
-    return res.status(500).json({ error: error.message });
+    return res.status(200).json({ models: data }); // [{ model_slug,name }]
+  } catch (e) {
+    console.error('models-list error:', e);
+    return res.status(500).json({ error: 'Internal server error' });
   }
-  res.status(200).json({ models: data });   // [{ model_slug, name }]
 }

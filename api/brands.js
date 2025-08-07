@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { setCors } from '../../lib/cors.js';
+import { setCors } from './cors.js';
 
 export default async function handler(req, res) {
   setCors(req, res);
@@ -11,8 +11,7 @@ export default async function handler(req, res) {
       process.env.SUPABASE_SERVICE_ROLE_KEY
     );
 
-    // [{ slug, name }]
-    const { data, error } = await supa.rpc('distinct_brands');
+    const { data, error } = await supa.rpc('distinct_brands'); // [{ slug,name }]
     if (error) throw error;
 
     const brands = (data || []).sort((a, b) =>
@@ -22,6 +21,6 @@ export default async function handler(req, res) {
     return res.status(200).json({ brands });
   } catch (e) {
     console.error('brands error:', e);
-    return res.status(500).json({ error: String(e.message || e) });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 }

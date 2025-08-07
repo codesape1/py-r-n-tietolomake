@@ -1,10 +1,10 @@
-// api/years.js
 import { createClient } from '@supabase/supabase-js';
+import { setCors } from '../../lib/cors.js';
 
 const TABLE = process.env.TABLE_NAME || 'e_bikes';
 
 export default async function handler(req, res) {
-  cors(res);
+  setCors(req, res);
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   const { brand } = req.query || {};
@@ -16,7 +16,7 @@ export default async function handler(req, res) {
       process.env.SUPABASE_SERVICE_ROLE_KEY
     );
 
-    // 1. täsmä slogilla
+    // 1) slug
     let { data, error } = await sb
       .from(TABLE)
       .select('year')
@@ -25,7 +25,7 @@ export default async function handler(req, res) {
 
     if (error) throw error;
 
-    // 2. fallback: brand_name ILIKE, jos slogilla ei löytynyt yhtään
+    // 2) fallback: brand_name ILIKE
     if (!data.length) {
       ({ data, error } = await sb
         .from(TABLE)
@@ -35,9 +35,8 @@ export default async function handler(req, res) {
       if (error) throw error;
     }
 
-    // poimi distinct 20xx-vuodet
-    const extract = y =>
-      (String(y).match(/\b(20\d{2})\b/) || [])[1] ?? null;
+    // distinct 20xx-vuodet
+    const extract = y => (String(y).match(/\b(20\d{2})\b/) || [])[1] ?? null;
 
     const years = [...new Set(data.map(r => extract(r.year)).filter(Boolean))]
       .sort((a, b) => b - a);
@@ -45,12 +44,6 @@ export default async function handler(req, res) {
     return res.status(200).json({ years });
   } catch (e) {
     console.error('years error', { brand, msg: e.message });
-    return res.status(500).json({ error: String(e.message || e) });
+    return res.status(500).json({ error: 'Internal server error' });
   }
-}
-
-function cors(res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 }

@@ -1,21 +1,19 @@
-// api/upload.js
 import { createClient } from '@supabase/supabase-js';
+import { setCors } from '../../lib/cors.js';
 
 const BUCKET = process.env.BUCKET_NAME || 'quote_uploads';
 
 export const config = {
-  api: {
-    bodyParser: { sizeLimit: '10mb' } // riittää 3–5 kuvaa / lomake
-  }
+  api: { bodyParser: { sizeLimit: '10mb' } }   // ~3–5 kuvaa
 };
 
 export default async function handler(req, res) {
-  setCors(res);
+  setCors(req, res);
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   try {
-    const { files } = await readJson(req); // [{name,type,data}] data=base64 ilman prefixiä
+    const { files } = await readJson(req);   // [{name,type,data(base64)}]
     if (!Array.isArray(files) || files.length === 0) {
       return res.status(400).json({ error: 'files[] required' });
     }
@@ -28,7 +26,6 @@ export default async function handler(req, res) {
       if (!name || !type || !data) continue;
 
       const bytes = Buffer.from(data, 'base64');
-      const ext = (name.split('.').pop() || 'bin').toLowerCase();
       const key = `${new Date().toISOString().slice(0,10)}/${cryptoRandom(8)}_${sanitize(name)}`;
 
       const { error } = await supa.storage.from(BUCKET).upload(key, bytes, {
@@ -44,14 +41,8 @@ export default async function handler(req, res) {
     return res.status(200).json({ urls: out });
   } catch (e) {
     console.error('upload error', e);
-    return res.status(500).json({ error: String(e.message || e) });
+    return res.status(500).json({ error: 'Internal server error' });
   }
-}
-
-function setCors(res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 }
 
 async function readJson(req) {
@@ -63,7 +54,8 @@ async function readJson(req) {
 }
 
 function cryptoRandom(n) {
-  return [...crypto.getRandomValues(new Uint8Array(n))].map(b => b.toString(16).padStart(2,'0')).join('');
+  return [...crypto.getRandomValues(new Uint8Array(n))]
+    .map(b => b.toString(16).padStart(2,'0')).join('');
 }
 
 function sanitize(name) {

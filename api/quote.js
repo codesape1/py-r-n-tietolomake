@@ -1,17 +1,23 @@
-// api/quote.js
 import { createClient } from '@supabase/supabase-js';
+import { setCors } from '../../lib/cors.js';
 
 const QUOTES = process.env.QUOTES_TABLE || 'quotes';
 
 export default async function handler(req, res) {
-  setCors(res);
+  setCors(req, res);
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   try {
     const body = await readJson(req);
 
-    // --- otetaan kentät ---
+    /* --- honeypot --- */
+    if (body.company) {
+      // hiljainen droppi boteille
+      return res.status(200).json({ ok: true });
+    }
+
+    // --- otetaan kentät lomakkeesta ---
     const {
       brand, year, model, model_slug, size,
       mileage_km, price_new_eur,
@@ -20,7 +26,7 @@ export default async function handler(req, res) {
       privacy_consent, photo_urls
     } = body || {};
 
-    // --- minimit ---
+    // --- minimivaatimukset ---
     if (!brand || !year || !email) {
       return res.status(400).json({ error: 'brand, year and email are required' });
     }
@@ -31,7 +37,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'privacy consent required' });
     }
 
-    // --- liiketoimintasäännöt (sama kuin UI:ssa) ---
+    // --- liiketoimintasäännöt ---
     const yearNum = parseInt(year, 10);
     const okYear = yearNum >= 2020 && yearNum <= 2025;
     const okMileage = (mileage_km ?? 0) <= 7000;
@@ -44,7 +50,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Bike does not meet purchase criteria' });
     }
 
-    // --- talletus ---
+    // --- talletus Supabaseen ---
     const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
     const row = {
       brand_slug: String(brand).toLowerCase(),
@@ -69,11 +75,11 @@ export default async function handler(req, res) {
     const { data, error } = await sb.from(QUOTES).insert([row]).select().single();
     if (error) throw error;
 
-    // (valinn.) vie Makeen/Sheetsiin
+    // (valinnainen) Make-tai Sheets-webhook
     if (process.env.MAKE_WEBHOOK_URL) {
       fetch(process.env.MAKE_WEBHOOK_URL, {
         method: 'POST',
-        headers: { 'Content-Type':'application/json' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
       }).catch(err => console.error('MAKE webhook failed:', err));
     }
@@ -81,15 +87,10 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true, id: data.id });
   } catch (e) {
     console.error('quote error', e);
-    return res.status(500).json({ error: String(e.message || e) });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 }
 
-function setCors(res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-}
 async function readJson(req) {
   if (req.body && typeof req.body === 'object') return req.body;
   const chunks = [];
